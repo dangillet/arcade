@@ -7,6 +7,7 @@ From https://github.com/TaylorSMarks/playsound/blob/master/playsound.py
 import os
 import typing
 from platform import system
+from pathlib import Path
 
 import pyglet
 
@@ -32,56 +33,37 @@ def _load_sound_library():
 
     import platform
     system = platform.system()
+    this_dir = Path(__file__).parent
     if system == 'Windows':
 
         import sys
         is64bit = sys.maxsize > 2 ** 32
 
-        import site
-        if hasattr(site, 'getsitepackages'):
-            packages = site.getsitepackages()
-            user_packages = site.getuserbase()
-
-            if appveyor:
-                if is64bit:
-                    path_global = "Win64/avbin"
-                else:
-                    path_global = "Win32/avbin"
-
-            else:
-                if is64bit:
-                    path_global = packages[0] + "/lib/site-packages/arcade/Win64/avbin"
-                    path_user = user_packages + "/lib/site-packages/arcade/Win64/avbin"
-                else:
-                    path_global = packages[0] + "/lib/site-packages/arcade/Win32/avbin"
-                    path_user = user_packages + "/lib/site-packages/arcade/Win32/avbin"
-
+        if is64bit:
+            path = this_dir / 'lib/Win64'
         else:
-            if is64bit:
-                path_global = "Win64/avbin"
-            else:
-                path_global = "Win32/avbin"
+            path = this_dir / 'lib/Win32'
 
+        os.environ['PATH'] += ";" + str(path.resolve())
 
     elif system == 'Darwin':
-        from distutils.sysconfig import get_python_lib
-        path_global = get_python_lib() + '/lib/site-packages/arcade/lib/libavbin.10.dylib'
+        path = this_dir / 'lib/MacOS'
+        os.environ['LD_LIBRARY_PATH'] += ':' + str(path.resolve())
         pyglet.options['audio'] = ('openal', 'pulse', 'silent')
 
     else:
-        path_global = "avbin"
+        path = this_dir / 'lib/Linux'
         pyglet.options['audio'] = ('openal', 'pulse', 'silent')
 
-    try:
-        pyglet.lib.load_library(path_user)
-    except ImportError:
-        pyglet.lib.load_library(path_global)
-
-    pyglet.have_avbin = True
+    print("Have FFmpeg", pyglet.media.have_ffmpeg())
 
 
 # Initialize static function variable
 _load_sound_library._sound_library_loaded = False
+
+# Load sound lib now, before we access to pyglet.media in typing information.
+# The function sets the proper environment variable to locate the right lib.
+_load_sound_library()
 
 
 def _shellquote(s):
@@ -92,7 +74,7 @@ def _load_sound_win(sound):
     """
     Load a sound on Windows
     """
-    s = pyglet.media.load(sound)
+    s = pyglet.media.load(sound, streaming=False)
     s.file = sound
     return s
 
@@ -199,21 +181,9 @@ def _load_sound_other(filename: str) -> typing.Any:
 
     return filename
 
-
-system = system()
-
-if system == 'Windows':
-    _load_sound_library()
-    play_sound = _play_sound_win
-    load_sound = _load_sound_win
-elif system == 'Darwin':
-    play_sound = _playsound_osx
-    load_sound = _loadsound_osx
-else:
-    play_sound = _playsound_unix
-    load_sound = _load_sound_unix
-
-del system
+# Just use plain vanilla Pyglet media player for all platforms
+play_sound = _play_sound_win
+load_sound = _load_sound_win
 
 
 class _Player:
