@@ -6,7 +6,7 @@ From https://github.com/TaylorSMarks/playsound/blob/master/playsound.py
 
 import os
 import typing
-from platform import system
+import platform
 from pathlib import Path
 
 import pyglet
@@ -18,22 +18,11 @@ class PlaysoundException(Exception):
 
 def _load_sound_library():
     """
-    Special code for Windows so we grab the proper avbin from our directory.
-    Otherwise hope the correct package is installed.
+    Load FFmpeg libraries.
     """
 
-    # lazy loading
-    if not _load_sound_library._sound_library_loaded:
-        _load_sound_library._sound_library_loaded = True
-    else:
-        return
-
-    import os
-    appveyor = not os.environ.get('APPVEYOR') is None
-
-    import platform
-    system = platform.system()
     this_dir = Path(__file__).parent
+    system = platform.system()
     if system == 'Windows':
 
         import sys
@@ -52,14 +41,16 @@ def _load_sound_library():
         pyglet.options['audio'] = ('openal', 'pulse', 'silent')
 
     else:
+        # Linux. I don't know if we're supposed to provide the FFmpeg .so binaries.
+        # Someone with expertise on Linux should answer.
+        # Problem if we rely on system-wide installation is that FFmpeg 4 is
+        # required. It seems that currently FFmpeg 3.4 is installed on Ubuntu.
         path = this_dir / 'lib/Linux'
         pyglet.options['audio'] = ('openal', 'pulse', 'silent')
 
-    print("Have FFmpeg", pyglet.media.have_ffmpeg())
+    if __debug__:
+        print("Have FFmpeg", pyglet.media.have_ffmpeg())
 
-
-# Initialize static function variable
-_load_sound_library._sound_library_loaded = False
 
 # Load sound lib now, before we access to pyglet.media in typing information.
 # The function sets the proper environment variable to locate the right lib.
@@ -70,21 +61,25 @@ def _shellquote(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
 
-def _load_sound_win(sound):
+def _load_sound_pyglet(sound: typing.Union[str, Path]):
     """
-    Load a sound on Windows
+    Load a sound
     """
-    s = pyglet.media.load(sound, streaming=False)
+    s = pyglet.media.load(str(sound), streaming=False)
     s.file = sound
     return s
 
 
-def _play_sound_win(sound: typing.Type[pyglet.media.Source]):
+def _play_sound_pyglet(sound: typing.Type[pyglet.media.Source]) -> typing.Type[pyglet.media.Player]:
     """
-    Play a sound on Windows
+    Play a sound
     """
-    sound.play()
+    return sound.play()
 
+######################################################
+# Keep those function in the meantime while testing...
+# |
+# V
 
 def _loadsound_osx(filename):
     try:
@@ -172,6 +167,11 @@ def _load_sound_unix(filename: str) -> typing.Any:
     else:
         return filename
 
+# ^
+# |
+# Keep those function in the meantime while testing...
+######################################################
+
 
 def _load_sound_other(filename: str) -> typing.Any:
     """
@@ -182,8 +182,8 @@ def _load_sound_other(filename: str) -> typing.Any:
     return filename
 
 # Just use plain vanilla Pyglet media player for all platforms
-play_sound = _play_sound_win
-load_sound = _load_sound_win
+play_sound = _play_sound_pyglet
+load_sound = _load_sound_pyglet
 
 
 class _Player:
